@@ -1,0 +1,4 @@
+flask==3.0.0
+python-dotenv==1.0.0
+ibm-watson-machine-learning==1.0.335
+pytest==7.4.3

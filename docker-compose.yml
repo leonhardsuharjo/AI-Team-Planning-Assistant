@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  shiftiq:
+    build: .
+    container_name: shiftiq
+    ports:
+      - "5001:5000"
+    environment:
+      - IBMWATSONX_API_KEY=${IBMWATSONX_API_KEY}
+      - IBMWATSONX_PROJECT_ID=${IBMWATSONX_PROJECT_ID}
+      - IBMWATSONX_URL=${IBMWATSONX_URL}
+      - DATABASE_PATH=database/shiftiq.db
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - FLASK_ENV=development
+    volumes:
+      - ./database:/app/database
+    restart: unless-stopped

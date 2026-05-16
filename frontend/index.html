@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SHIFTIQ - AI Shift Scheduling</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #0f1117; color: #e5e7eb; }
+        .header { background: #1a1d27; padding: 1.5rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #2a2d37; }
+        .logo { font-size: 1.8rem; font-weight: 700; color: #3b82f6; }
+        .header-controls { display: flex; gap: 1rem; align-items: center; }
+        .week-label { font-size: 1rem; color: #9ca3af; }
+        .btn { padding: 0.75rem 1.5rem; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-success { background: #22c55e; color: white; }
+        .status-badge { padding: 0.5rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; }
+        .status-optimal { background: #22c55e; color: white; }
+        .status-acceptable { background: #f59e0b; color: white; }
+        .status-understaffed { background: #ef4444; color: white; }
+        .main-container { display: flex; height: calc(100vh - 80px); }
+        .schedule-area { flex: 1; padding: 2rem; overflow-y: auto; }
+        .shift-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1rem; margin-top: 1.5rem; }
+        .day-header { background: #1a1d27; padding: 1rem; text-align: center; font-weight: 600; border-radius: 0.5rem; }
+        .shift-cell { background: #1a1d27; padding: 1.5rem; border-radius: 0.5rem; cursor: pointer; transition: all 0.2s; position: relative; min-height: 120px; }
+        .shift-cell:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .shift-name { font-size: 0.875rem; color: #9ca3af; margin-bottom: 0.5rem; }
+        .shift-count { font-size: 1.5rem; font-weight: 700; }
+        .shift-full { background: #22c55e; }
+        .shift-partial { background: #f59e0b; }
+        .shift-empty { background: #ef4444; }
+        .conflict-icon { position: absolute; top: 0.5rem; right: 0.5rem; width: 20px; height: 20px; background: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; }
+        .sidebar { width: 400px; background: #1a1d27; border-left: 2px solid #2a2d37; overflow-y: auto; }
+        .sidebar-tabs { display: flex; border-bottom: 2px solid #2a2d37; }
+        .tab { flex: 1; padding: 1rem; text-align: center; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+        .tab.active { background: #0f1117; color: #3b82f6; }
+        .sidebar-content { padding: 1.5rem; }
+        .worker-card { background: #0f1117; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; cursor: pointer; transition: all 0.2s; }
+        .worker-card:hover { transform: translateX(4px); border-left: 3px solid #3b82f6; }
+        .worker-name { font-weight: 600; margin-bottom: 0.25rem; }
+        .worker-role { font-size: 0.875rem; color: #9ca3af; }
+        .worker-hours { font-size: 0.875rem; color: #f59e0b; margin-top: 0.5rem; }
+        .availability-dots { display: flex; gap: 0.25rem; margin-top: 0.5rem; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot-available { background: #22c55e; }
+        .dot-unavailable { background: #4b5563; }
+        .dot-overbooked { background: #f59e0b; border: 2px solid #fbbf24; }
+        .worker-hours-warning { color: #ef4444 !important; font-weight: 700; }
+        .conflict-card { background: #0f1117; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 3px solid #ef4444; }
+        .conflict-type { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; margin-bottom: 0.5rem; }
+        .type-understaffed { background: #f59e0b; color: white; }
+        .type-double-booked { background: #ef4444; color: white; }
+        .type-unavailable { background: #fb923c; color: white; }
+        .conflict-desc { font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .conflict-resolution { font-size: 0.75rem; color: #9ca3af; padding: 0.5rem; background: #1a1d27; border-radius: 0.25rem; margin-top: 0.5rem; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 1000; }
+        .modal.active { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: #1a1d27; padding: 2rem; border-radius: 1rem; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+        .modal-title { font-size: 1.5rem; font-weight: 700; }
+        .close-btn { background: none; border: none; color: #9ca3af; font-size: 1.5rem; cursor: pointer; }
+        .form-group { margin-bottom: 1.5rem; }
+        .form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        .form-input { width: 100%; padding: 0.75rem; background: #0f1117; border: 1px solid #2a2d37; border-radius: 0.5rem; color: #e5e7eb; }
+        .availability-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+        .availability-toggle { padding: 0.75rem; border: 2px solid #2a2d37; border-radius: 0.5rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .availability-toggle.available { background: #22c55e; border-color: #22c55e; color: white; }
+        .availability-toggle.unavailable { background: #4b5563; border-color: #4b5563; color: #9ca3af; }
+        .btn-add { background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; margin-bottom: 1rem; width: 100%; }
+        .loading { text-align: center; padding: 2rem; color: #9ca3af; }
+        .assignment-list { margin-top: 1rem; }
+        .assignment-item { padding: 0.5rem; background: #0f1117; border-radius: 0.25rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; }
+        .fallback-badge { background: #6b7280; color: white; padding: 0.25rem 0.75rem; border-radius: 0.25rem; font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">SHIFTIQ</div>
+        <div class="header-controls">
+            <div class="week-label" id="weekLabel">Week of May 15, 2026</div>
+            <button class="btn btn-primary" onclick="generateSchedule()">Generate Schedule</button>
+            <div class="status-badge status-acceptable" id="statusBadge">Acceptable</div>
+        </div>
+    </div>
+    <div class="main-container">
+        <div class="schedule-area">
+            <div class="shift-grid" id="shiftGrid"></div>
+        </div>
+        <div class="sidebar">
+            <div class="sidebar-tabs">
+                <div class="tab active" onclick="switchTab('workers')">Workers</div>
+                <div class="tab" onclick="switchTab('conflicts')">Conflicts</div>
+            </div>
+            <div class="sidebar-content">
+                <div id="workersTab">
+                    <button class="btn-add" onclick="openWorkerModal()">+ Add Worker</button>
+                    <div id="workersList"></div>
+                </div>
+                <div id="conflictsTab" style="display:none;">
+                    <div id="conflictsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal" id="workerModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalTitle">Add Worker</div>
+                <button class="close-btn" onclick="closeWorkerModal()">&times;</button>
+            </div>
+            <form id="workerForm" onsubmit="saveWorker(event)">
+                <div class="form-group">
+                    <label class="form-label">Worker Name</label>
+                    <input type="text" class="form-input" id="workerName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Role</label>
+                    <select class="form-input" id="workerRole" required>
+                        <option value="Cashier">Cashier</option>
+                        <option value="Supervisor">Supervisor</option>
+                        <option value="Technician">Technician</option>
+                        <option value="Cleaner">Cleaner</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Max Hours/Week</label>
+                    <input type="number" class="form-input" id="workerMaxHours" value="40" min="1" max="60" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Availability</label>
+                    <div id="availabilityGrid"></div>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Save Worker</button>
+            </form>
+        </div>
+    </div>
+    <div class="modal" id="shiftModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="shiftModalTitle">Shift Details</div>
+                <button class="close-btn" onclick="closeShiftModal()">&times;</button>
+            </div>
+            <div id="shiftModalContent"></div>
+        </div>
+    </div>
+    <script>
+        let currentSchedule = null;
+        let workers = [];
+        let conflicts = [];
+        let requirements = [];
+        let currentWorkerId = null;
+        let availabilityState = {};
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const shifts = ['Morning', 'Evening'];
+
+        async function init() {
+            await loadRequirements();
+            await loadWorkers();
+            await loadLatestSchedule();
+            renderShiftGrid();
+            renderWorkersList();
+        }
+
+        async function loadRequirements() {
+            const response = await fetch('/api/coverage-requirements');
+            requirements = await response.json();
+        }
+
+        async function loadWorkers() {
+            const response = await fetch('/api/workers');
+            workers = await response.json();
+        }
+
+
+
+
+
+
+
+
+
+
+        async function loadLatestSchedule() {
+            const response = await fetch('/api/schedules');
+            const schedules = await response.json();
+            if (schedules.length > 0) {
+                const latestId = schedules[0].schedule_id;
+                const scheduleResponse = await fetch(`/api/schedules/${latestId}`);
+                currentSchedule = await scheduleResponse.json();
+                conflicts = currentSchedule.conflicts || [];
+                updateStatusBadge(currentSchedule.status);
+            }
+        }
+
+        function renderShiftGrid() {
+            const grid = document.getElementById('shiftGrid');
+            grid.innerHTML = '';
+            days.forEach(day => {
+                const header = document.createElement('div');
+                header.className = 'day-header';
+                header.textContent = day;
+                grid.appendChild(header);
+            });
+            shifts.forEach(shift => {
+                days.forEach(day => {
+                    const cell = document.createElement('div');
+                    cell.className = 'shift-cell';
+                    const assignments = getAssignmentsForSlot(day, shift);
+                    const requirement = getRequirementForSlot(day, shift);
+                    const assigned = assignments.length;
+                    const required = requirement ? requirement.min_workers : 0;
+                    cell.innerHTML = `<div class="shift-name">${shift}</div><div class="shift-count">${assigned}/${required}</div>`;
+                    if (assigned >= required && required > 0) {
+                        cell.classList.add('shift-full');
+                    } else if (assigned > 0) {
+                        cell.classList.add('shift-partial');
+                    } else if (required > 0) {
+                        cell.classList.add('shift-empty');
+                    }
+                    const hasConflict = conflicts.some(c => c.day_of_week === day && c.shift === shift);
+                    if (hasConflict) {
+                        cell.innerHTML += '<div class="conflict-icon">!</div>';
+                    }
+                    cell.onclick = () => openShiftModal(day, shift);
+                    grid.appendChild(cell);
+                });
+            });
+        }
+        function getAssignmentsForSlot(day, shift) {
+            if (!currentSchedule || !currentSchedule.assignments) return [];
+            return currentSchedule.assignments.filter(a => a.day_of_week === day && a.shift === shift);
+        }
+
+        function getRequirementForSlot(day, shift) {
+            return requirements.find(r => r.day_of_week === day && r.shift === shift);
+        }
+
+        function renderWorkersList() {
+            const list = document.getElementById('workersList');
+            list.innerHTML = '';
+            workers.forEach(worker => {
+                const card = document.createElement('div');
+                card.className = 'worker-card';
+                const totalHours = calculateWorkerHours(worker.worker_id);
+                let dots = '';
+                days.forEach(day => {
+                    const morning = worker.availability[day]?.Morning ? 'dot-available' : 'dot-unavailable';
+                    const evening = worker.availability[day]?.Evening ? 'dot-available' : 'dot-unavailable';
+                    dots += `<div class="dot ${morning}"></div><div class="dot ${evening}"></div>`;
+                });
+                card.innerHTML = `<div class="worker-name">${worker.name}</div><div class="worker-role">${worker.role}</div><div class="worker-hours">${totalHours}h this week</div><div class="availability-dots">${dots}</div>`;
+                card.onclick = () => editWorker(worker);
+                list.appendChild(card);
+            });
+        }
+
+        function calculateWorkerHours(workerId) {
+            if (!currentSchedule || !currentSchedule.assignments) return 0;
+            const assignments = currentSchedule.assignments.filter(a => a.worker_id === workerId);
+            return assignments.length * 8;
+        }
+
+        function renderConflictsList() {
+            const list = document.getElementById('conflictsList');
+            list.innerHTML = '';
+            if (conflicts.length === 0) {
+                list.innerHTML = '<div class="loading">No conflicts detected</div>';
+                return;
+            }
+            conflicts.forEach(conflict => {
+                const card = document.createElement('div');
+                card.className = 'conflict-card';
+                const typeClass = conflict.conflict_type === 'UNDERSTAFFED' ? 'type-understaffed' : conflict.conflict_type === 'DOUBLE_BOOKED' ? 'type-double-booked' : 'type-unavailable';
+                const resolution = conflict.description.includes('Resolution:') ? conflict.description.split('Resolution:')[1].trim() : 'Addressed in schedule generation';
+                card.innerHTML = `<div class="conflict-type ${typeClass}">${conflict.conflict_type}</div><div class="conflict-desc">${conflict.day_of_week} ${conflict.shift}</div><div class="conflict-desc">${conflict.description.split('Resolution:')[0]}</div><div class="conflict-resolution"><strong>Granite's Resolution:</strong> ${resolution}</div>`;
+                list.appendChild(card);
+            });
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if (tab === 'workers') {
+                document.getElementById('workersTab').style.display = 'block';
+                document.getElementById('conflictsTab').style.display = 'none';
+            } else {
+                document.getElementById('workersTab').style.display = 'none';
+                document.getElementById('conflictsTab').style.display = 'block';
+                renderConflictsList();
+            }
+        }
+
+        function openWorkerModal() {
+            currentWorkerId = null;
+            document.getElementById('modalTitle').textContent = 'Add Worker';
+            document.getElementById('workerName').value = '';
+            document.getElementById('workerRole').value = 'Cashier';
+            document.getElementById('workerMaxHours').value = '40';
+            availabilityState = {};
+            days.forEach(day => {
+                availabilityState[day] = {};
+                shifts.forEach(shift => {
+                    availabilityState[day][shift] = false;
+                });
+            });
+            renderAvailabilityGrid();
+            document.getElementById('workerModal').classList.add('active');
+        }
+
+        function editWorker(worker) {
+            currentWorkerId = worker.worker_id;
+            document.getElementById('modalTitle').textContent = 'Edit Worker';
+            document.getElementById('workerName').value = worker.name;
+            document.getElementById('workerRole').value = worker.role;
+            document.getElementById('workerMaxHours').value = worker.max_hours_per_week;
+            availabilityState = JSON.parse(JSON.stringify(worker.availability));
+            renderAvailabilityGrid();
+            document.getElementById('workerModal').classList.add('active');
+        }
+
+        function closeWorkerModal() {
+            document.getElementById('workerModal').classList.remove('active');
+        }
+
+        function renderAvailabilityGrid() {
+            const grid = document.getElementById('availabilityGrid');
+            grid.innerHTML = '';
+            days.forEach(day => {
+                const dayLabel = document.createElement('div');
+                dayLabel.style.gridColumn = '1 / -1';
+                dayLabel.style.fontWeight = '600';
+                dayLabel.style.marginTop = '0.5rem';
+                dayLabel.textContent = day;
+                grid.appendChild(dayLabel);
+                shifts.forEach(shift => {
+                    const toggle = document.createElement('div');
+                    const isAvailable = availabilityState[day]?.[shift] || false;
+                    toggle.className = `availability-toggle ${isAvailable ? 'available' : 'unavailable'}`;
+                    toggle.textContent = shift;
+                    toggle.onclick = () => toggleAvailability(day, shift);
+                    grid.appendChild(toggle);
+                });
+            });
+        }
+
+        function toggleAvailability(day, shift) {
+            if (!availabilityState[day]) availabilityState[day] = {};
+            availabilityState[day][shift] = !availabilityState[day][shift];
+            renderAvailabilityGrid();
+        }
+
+        async function saveWorker(event) {
+            event.preventDefault();
+            const name = document.getElementById('workerName').value;
+            const role = document.getElementById('workerRole').value;
+            const maxHours = parseInt(document.getElementById('workerMaxHours').value);
+            let hasAvailability = false;
+            for (const day in availabilityState) {
+                for (const shift in availabilityState[day]) {
+                    if (availabilityState[day][shift]) {
+                        hasAvailability = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasAvailability) {
+                alert('Please select at least one availability slot');
+                return;
+            }
+            if (currentWorkerId) {
+                for (const day in availabilityState) {
+                    for (const shift in availabilityState[day]) {
+                        await fetch(`/api/workers/${currentWorkerId}/availability`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({day_of_week: day, shift: shift, is_available: availabilityState[day][shift] ? 1 : 0})
+                        });
+                    }
+                }
+            } else {
+                const response = await fetch('/api/workers', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name, role, max_hours_per_week: maxHours})
+                });
+                const newWorker = await response.json();
+                for (const day in availabilityState) {
+                    for (const shift in availabilityState[day]) {
+                        await fetch(`/api/workers/${newWorker.worker_id}/availability`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({day_of_week: day, shift: shift, is_available: availabilityState[day][shift] ? 1 : 0})
+                        });
+                    }
+                }
+            }
+            closeWorkerModal();
+            await loadWorkers();
+            renderWorkersList();
+        }
+
+        async function generateSchedule() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            try {
+                const response = await fetch('/api/generate-schedule', {method: 'POST'});
+                const result = await response.json();
+                await loadLatestSchedule();
+                renderShiftGrid();
+                renderConflictsList();
+                btn.textContent = 'Generate Schedule';
+                btn.disabled = false;
+            } catch (error) {
+                alert('Error generating schedule: ' + error.message);
+                btn.textContent = 'Generate Schedule';
+                btn.disabled = false;
+            }
+        }
+
+        function openShiftModal(day, shift) {
+            const assignments = getAssignmentsForSlot(day, shift);
+            const shiftConflicts = conflicts.filter(c => c.day_of_week === day && c.shift === shift);
+            document.getElementById('shiftModalTitle').textContent = `${day} ${shift}`;
+            let content = '<div class="assignment-list">';
+            if (assignments.length === 0) {
+                content += '<div class="loading">No workers assigned</div>';
+            } else {
+                assignments.forEach(a => {
+                    content += `<div class="assignment-item"><span>${a.worker_name}</span><span>${a.role}</span></div>`;
+                });
+            }
+            content += '</div>';
+            if (shiftConflicts.length > 0) {
+                content += '<div style="margin-top:1rem;"><strong>Conflicts:</strong></div>';
+                shiftConflicts.forEach(c => {
+                    const resolution = c.description.includes('Resolution:') ? c.description.split('Resolution:')[1].trim() : 'Addressed';
+                    content += `<div class="conflict-resolution" style="margin-top:0.5rem;"><strong>Granite's Resolution:</strong> ${resolution}</div>`;
+                });
+            }
+            document.getElementById('shiftModalContent').innerHTML = content;
+            document.getElementById('shiftModal').classList.add('active');
+        }
+
+        function closeShiftModal() {
+            document.getElementById('shiftModal').classList.remove('active');
+        }
+
+        function updateStatusBadge(status) {
+            const badge = document.getElementById('statusBadge');
+            badge.className = 'status-badge';
+            if (status === 'Optimal') {
+                badge.classList.add('status-optimal');
+                badge.textContent = 'Optimal';
+            } else if (status === 'Understaffed') {
+                badge.classList.add('status-understaffed');
+                badge.textContent = 'Understaffed';
+            } else {
+                badge.classList.add('status-acceptable');
+                badge.textContent = 'Acceptable';
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
